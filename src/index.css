@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    /* PSK Authentic Surfaces */
+    --surface-base: #0e0e11;
+    --surface-primary: #15151b;
+    --surface-secondary: #1c1c24;
+    --surface-tertiary: #242430;
+    --surface-elevated: #2c2c3b;
+
+    /* PSK Brand Colors */
+    --brand-primary: #1752bf;
+    --brand-primary-hover: #1447a6;
+    --brand-accent-gold: #ffd000;
+    --brand-accent-red: #d01111;
+
+    /* Semantic Status & Health */
+    --status-healthy: #10b981;
+    --status-healthy-bg: rgba(16, 185, 129, 0.12);
+    --status-friction: #f59e0b;
+    --status-friction-bg: rgba(245, 158, 11, 0.12);
+    --status-risk: #d01111;
+    --status-risk-bg: rgba(208, 17, 17, 0.15);
+
+    /* Typography Content */
+    --content-primary: #ffffff;
+    --content-secondary: #9a9aa8;
+    --content-muted: #646473;
+    --content-on-brand: #ffffff;
+  }
+
+  body {
+    background-color: var(--surface-base);
+    color: var(--content-primary);
+    font-family: Roboto, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Custom high-performance dark scrollbars */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0e0e11;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #242430;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #38384d;
+  }
+}
+
+/* Odds Drift & Health Visual Animations */
+@keyframes pulse-drift {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+
+.animate-drift-up {
+  animation: pulse-drift 0.45s ease-in-out;
+  color: #10b981 !important;
+  background-color: rgba(16, 185, 129, 0.15) !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+}
+
+.animate-drift-down {
+  animation: pulse-drift 0.45s ease-in-out;
+  color: #ef4444 !important;
+  background-color: rgba(239, 68, 68, 0.15) !important;
+  border-color: rgba(239, 68, 68, 0.4) !important;
+}
