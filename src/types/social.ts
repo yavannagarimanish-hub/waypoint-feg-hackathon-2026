@@ -28,9 +28,11 @@ export interface UserProfile {
   id: string;
   username: string;
   displayName: string;
+  email?: string;
   avatar: string; // URL, data URL, or preset id
   bio: string;
   createdAt: number;
+  lastLoginAt?: number;
   loginStreak: LoginStreak;
   stats: UserStats;
   achievements: UserAchievement[];

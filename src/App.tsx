@@ -11,6 +11,7 @@ import { BetslipTray } from './components/betslip/BetslipTray';
 import { LiveRoom } from './components/social/LiveRoom';
 import { CreateRoomModal, JoinRoomModal } from './components/social/RoomModals';
 import { ProfileModal, LoginModal } from './components/social/UserModals';
+import { CustomerLoginPortal } from './components/auth/CustomerLoginPortal';
 import { OperatorDashboard } from './components/operator/OperatorDashboard';
 import { SportsEvent } from './types/canonical';
 import { parseRoomUrl, resolveRoomDeepLink } from './services/roomDeepLink';
@@ -31,7 +32,7 @@ export function resolvePortalRoute(pathname: string, hash: string): 'user' | 'ad
 }
 
 const MainLayout: React.FC = () => {
-  const { state, events, activeEvent, selectEvent, joinRoom, joinCustomRoom, navigateToScreen } = useSession();
+  const { state, events, activeEvent, selectEvent, joinRoom, joinCustomRoom, navigateToScreen, user, loginUser } = useSession();
   
   // Two clearly separated application experiences: 'user' vs 'admin'
   const [portal, setPortal] = useState<'user' | 'admin'>(() => {
@@ -170,7 +171,19 @@ const MainLayout: React.FC = () => {
     );
   }
 
-  // RENDER USER PORTAL
+  // RENDER CUSTOMER LOGIN PORTAL IF UNAUTHENTICATED
+  if (!user) {
+    return (
+      <CustomerLoginPortal
+        onLoginSuccess={(u) => {
+          loginUser(u.username, u.displayName, u.avatar);
+        }}
+        onSwitchToAdmin={() => switchPortal('admin')}
+      />
+    );
+  }
+
+  // RENDER USER PORTAL (AUTHENTICATED)
   return (
     <div className="min-h-screen bg-[#0e0e11] text-zinc-200 flex flex-col font-sans pb-8 selection:bg-[#1752bf] selection:text-white">
       {/* Top Command Bar & Session GPS */}

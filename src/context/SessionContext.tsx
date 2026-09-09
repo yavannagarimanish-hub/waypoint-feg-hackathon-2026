@@ -43,6 +43,9 @@ import {
   validateUsername,
   findPrototypeAccount,
   savePrototypeAccount,
+  getAuthSession,
+  saveAuthSession,
+  clearAuthSession,
 } from '../services/socialUserService';
 import {
   buildSessionMemory,
@@ -152,17 +155,16 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [rooms, setRooms] = useState<LiveMatchRoom[]>([]);
   const [activeCustomRoom, setActiveCustomRoom] = useState<LiveMatchRoom | null>(null);
 
-  // Social Identity State (Phase 12)
+  // Social Identity State (Phase 12 / 21)
   const [user, setUser] = useState<UserProfile | null>(() => {
     try {
-      const saved = localStorage.getItem('waypoint_prototype_user');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        parsed.loginStreak = calculateLoginStreak(parsed.loginStreak);
-        return parsed;
+      const authUser = getAuthSession();
+      if (authUser) {
+        authUser.loginStreak = calculateLoginStreak(authUser.loginStreak);
+        return authUser;
       }
     } catch {}
-    return createDefaultUser();
+    return null;
   });
 
   const [roomParticipants, setRoomParticipants] = useState<RoomParticipant[]>(() =>
@@ -348,11 +350,11 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
     emitEvent('SESSION_STARTED', { userAgent: navigator.userAgent, referrer: document.referrer });
   }, []);
 
-  // Save user profile changes to prototype local storage and accounts registry
+  // Save user profile changes to prototype local storage, auth session, and accounts registry
   useEffect(() => {
     if (user) {
       try {
-        localStorage.setItem('waypoint_prototype_user', JSON.stringify(user));
+        saveAuthSession(user);
         savePrototypeAccount(user);
       } catch {}
     }
@@ -450,6 +452,7 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
 
     setUser(resolvedUser);
     savePrototypeAccount(resolvedUser);
+    saveAuthSession(resolvedUser);
     setRoomParticipants(getInitialRoomParticipants(resolvedUser, false));
     setState(prev => ({
       ...prev,
@@ -464,9 +467,7 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   const logoutUser = () => {
     setUser(null);
-    try {
-      localStorage.removeItem('waypoint_prototype_user');
-    } catch {}
+    clearAuthSession();
     setState(prev => ({
       ...prev,
       socialRoomContext: {
@@ -1124,17 +1125,17 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
     setRooms([]);
     setActiveCustomRoom(null);
 
-    // Reset user to baseline default
-    const freshUser = createDefaultUser();
-    setUser(freshUser);
-    setRoomParticipants(getInitialRoomParticipants(freshUser, false));
-    try {
-      localStorage.removeItem('waypoint_prototype_user');
-    } catch {}
+    // Clear authenticated user and auth session on prototype reset
+    setUser(null);
+    clearAuthSession();
+    setRoomParticipants(getInitialRoomParticipants(createDefaultUser(), false));
 
     // Clear session memory on explicit demo reset
     clearSessionMemory();
     setSessionMemory(null);
+
+    // Clear authoritative live telemetry
+    clearAuthoritativeLiveTelemetry();
 
     // Reset Customer Context Layer (Phase 17)
     resetCustomerContext();
@@ -1202,7 +1203,7 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
         activeRoomId: null,
         activeUsersCount: 0,
         lastInteraction: null,
-        currentUserId: freshUser.id,
+        currentUserId: null,
         roomRank: 2,
       },
       sessionDna: 'STANDARD',

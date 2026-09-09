@@ -7,8 +7,10 @@ import {
   RoomPrediction,
 } from '../types/social';
 
-const STORAGE_KEY_USER = 'waypoint_prototype_user';
-const STORAGE_KEY_STREAK = 'waypoint_prototype_streak';
+export const STORAGE_KEY_USER = 'waypoint_prototype_user';
+export const STORAGE_KEY_AUTH = 'waypoint_auth_session';
+export const STORAGE_KEY_ACCOUNTS = 'waypoint_prototype_accounts';
+export const STORAGE_KEY_STREAK = 'waypoint_prototype_streak';
 
 export const PRESET_AVATARS = [
   { id: 'psk-blue', label: '🔵 PSK Blue Champion', url: '/assets/avatars/avatar_blue.svg' },
@@ -103,8 +105,6 @@ export const CATALOG_ACHIEVEMENTS: Omit<UserAchievement, 'unlockedAt'>[] = [
   },
 ];
 
-const STORAGE_KEY_ACCOUNTS = 'waypoint_prototype_accounts';
-
 /**
  * Validates username format:
  * - 3 to 20 characters
@@ -129,7 +129,90 @@ export function validateUsername(username: string): { valid: boolean; error?: st
 }
 
 // In-memory fallback map for non-browser / node test environments
-const memoryAccountsFallback: Record<string, UserProfile> = {};
+let memoryAccountsFallback: Record<string, UserProfile> = {};
+let memoryAuthSessionFallback: UserProfile | null = null;
+
+export function _resetAuthForTesting(): void {
+  memoryAccountsFallback = {};
+  memoryAuthSessionFallback = null;
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(STORAGE_KEY_AUTH);
+      localStorage.removeItem(STORAGE_KEY_USER);
+      localStorage.removeItem(STORAGE_KEY_ACCOUNTS);
+    }
+  } catch {}
+}
+
+/**
+ * Validates email format
+ */
+export function validateEmail(email: string): { valid: boolean; error?: string } {
+  const trimmed = (email || '').trim();
+  if (!trimmed) {
+    return { valid: false, error: 'Email address is required.' };
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(trimmed)) {
+    return { valid: false, error: 'Please enter a valid email address.' };
+  }
+  return { valid: true };
+}
+
+/**
+ * Validates password format for prototype interaction.
+ * NOTE: Passwords are NEVER persisted or stored.
+ */
+export function validatePassword(password: string): { valid: boolean; error?: string } {
+  if (!password || password.trim().length === 0) {
+    return { valid: false, error: 'Password is required.' };
+  }
+  if (password.length < 4) {
+    return { valid: false, error: 'Password must be at least 4 characters.' };
+  }
+  return { valid: true };
+}
+
+/**
+ * Saves authenticated customer session to localStorage.
+ */
+export function saveAuthSession(user: UserProfile): void {
+  memoryAuthSessionFallback = user;
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_AUTH, JSON.stringify(user));
+      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
+    }
+  } catch {}
+}
+
+/**
+ * Retrieves active authenticated customer session from localStorage.
+ */
+export function getAuthSession(): UserProfile | null {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem(STORAGE_KEY_AUTH) || localStorage.getItem(STORAGE_KEY_USER);
+      if (raw) {
+        return JSON.parse(raw);
+      }
+    }
+  } catch {}
+  return memoryAuthSessionFallback;
+}
+
+/**
+ * Clears active authenticated customer session on logout.
+ */
+export function clearAuthSession(): void {
+  memoryAuthSessionFallback = null;
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(STORAGE_KEY_AUTH);
+      localStorage.removeItem(STORAGE_KEY_USER);
+    }
+  } catch {}
+}
 
 /**
  * Retrieves the prototype accounts registry map from localStorage.
@@ -162,12 +245,161 @@ export function savePrototypeAccount(user: UserProfile): void {
 }
 
 /**
- * Looks up a prototype user by username from the accounts registry map.
+ * Looks up a prototype user by username or email from the accounts registry map.
  */
-export function findPrototypeAccount(username: string): UserProfile | null {
+export function findPrototypeAccount(identifier: string): UserProfile | null {
   const accounts = getStoredPrototypeAccounts();
-  const normalized = username.trim().toLowerCase();
-  return accounts[normalized] || memoryAccountsFallback[normalized] || null;
+  const normalized = identifier.trim().toLowerCase();
+  const allAccounts = { ...memoryAccountsFallback, ...accounts };
+  const direct = allAccounts[normalized];
+  if (direct) return direct;
+  return Object.values(allAccounts).find(
+    acc => (acc.email && acc.email.toLowerCase() === normalized) || acc.username.toLowerCase() === normalized
+  ) || null;
+}
+
+/**
+ * Authenticates into prototype account using email or username + password.
+ * NOTE: Password is required for realistic UX interaction, but NEVER stored.
+ */
+export function authenticatePrototypeUser(
+  emailOrUsername: string,
+  password?: string
+): { success: boolean; user?: UserProfile; error?: string } {
+  const trimmed = (emailOrUsername || '').trim();
+  if (!trimmed) {
+    return { success: false, error: 'Email or username is required.' };
+  }
+
+  // If email was entered, validate syntax
+  if (trimmed.includes('@')) {
+    const emailCheck = validateEmail(trimmed);
+    if (!emailCheck.valid) return { success: false, error: emailCheck.error };
+  }
+
+  // Validate password non-empty
+  const passCheck = validatePassword(password || '');
+  if (!passCheck.valid) {
+    return { success: false, error: passCheck.error };
+  }
+
+  const defaultUser = createDefaultUser();
+  const isDemoMatch =
+    trimmed.toLowerCase() === defaultUser.email?.toLowerCase() ||
+    trimmed.toLowerCase() === defaultUser.username.toLowerCase();
+
+  const existing = findPrototypeAccount(trimmed) || (isDemoMatch ? defaultUser : null);
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  if (existing) {
+    const updatedStreak = calculateLoginStreak(existing.loginStreak, todayStr);
+    const updatedUser: UserProfile = {
+      ...existing,
+      lastLoginAt: Date.now(),
+      loginStreak: updatedStreak,
+    };
+    savePrototypeAccount(updatedUser);
+    saveAuthSession(updatedUser);
+    return { success: true, user: updatedUser };
+  }
+
+  // Auto-provision prototype profile for demo flexibility
+  const cleanUsername = trimmed.includes('@')
+    ? trimmed.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_')
+    : trimmed.toLowerCase().replace(/[^a-zA-Z0-9_]/g, '_');
+
+  const newUser: UserProfile = {
+    id: `usr-${cleanUsername}-${Math.random().toString(36).substring(2, 6)}`,
+    username: cleanUsername,
+    displayName: cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1),
+    email: trimmed.includes('@') ? trimmed.toLowerCase() : `${cleanUsername}@waypoint.psk`,
+    avatar: '🦁',
+    bio: 'Waypoint sportsbook customer.',
+    createdAt: Date.now(),
+    lastLoginAt: Date.now(),
+    loginStreak: {
+      currentStreak: 1,
+      longestStreak: 1,
+      lastLoginDate: todayStr,
+    },
+    stats: {
+      roomsParticipated: 1,
+      roomsCreated: 0,
+      predictionsMade: 0,
+      predictionsCorrect: 0,
+      roomWins: 0,
+      totalPoints: 10,
+    },
+    achievements: [INITIAL_ACHIEVEMENTS[0]],
+  };
+
+  savePrototypeAccount(newUser);
+  saveAuthSession(newUser);
+  return { success: true, user: newUser };
+}
+
+/**
+ * Registers a new prototype customer profile.
+ * NOTE: Password is confirmed and validated, but NEVER stored.
+ */
+export function registerPrototypeUser(
+  name: string,
+  email: string,
+  password?: string,
+  confirmPassword?: string
+): { success: boolean; user?: UserProfile; error?: string } {
+  const trimmedName = (name || '').trim();
+  if (!trimmedName || trimmedName.length < 2) {
+    return { success: false, error: 'Name must be at least 2 characters.' };
+  }
+
+  const emailCheck = validateEmail(email);
+  if (!emailCheck.valid) return { success: false, error: emailCheck.error };
+
+  const passCheck = validatePassword(password || '');
+  if (!passCheck.valid) return { success: false, error: passCheck.error };
+
+  if (password !== confirmPassword) {
+    return { success: false, error: 'Passwords do not match.' };
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanUsername = cleanEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_');
+
+  if (findPrototypeAccount(cleanEmail) || findPrototypeAccount(cleanUsername)) {
+    return { success: false, error: 'An account with this email is already registered.' };
+  }
+
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  const newUser: UserProfile = {
+    id: `usr-${cleanUsername}-${Math.random().toString(36).substring(2, 6)}`,
+    username: cleanUsername,
+    displayName: trimmedName,
+    email: cleanEmail,
+    avatar: '🦁',
+    bio: 'Waypoint sportsbook customer.',
+    createdAt: Date.now(),
+    lastLoginAt: Date.now(),
+    loginStreak: {
+      currentStreak: 1,
+      longestStreak: 1,
+      lastLoginDate: todayStr,
+    },
+    stats: {
+      roomsParticipated: 1,
+      roomsCreated: 0,
+      predictionsMade: 0,
+      predictionsCorrect: 0,
+      roomWins: 0,
+      totalPoints: 10,
+    },
+    achievements: [INITIAL_ACHIEVEMENTS[0]],
+  };
+
+  savePrototypeAccount(newUser);
+  saveAuthSession(newUser);
+  return { success: true, user: newUser };
 }
 
 /**
@@ -225,9 +457,11 @@ export function createDefaultUser(): UserProfile {
     id: 'usr-demo-01',
     username: 'luka_zg',
     displayName: 'Luka Modric Fan',
+    email: 'luka.fan@waypoint.psk',
     avatar: '🦁',
     bio: 'Tactical football follower. Watching UEFA Champions League & Nations League.',
     createdAt: Date.now() - 86400000 * 5,
+    lastLoginAt: Date.now(),
     loginStreak: {
       currentStreak: 5,
       longestStreak: 5,

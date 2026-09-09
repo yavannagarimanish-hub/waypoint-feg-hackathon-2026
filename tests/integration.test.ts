@@ -156,5 +156,122 @@ describe('Phase 20 — User / Admin Portal Separation Hardening', () => {
   });
 });
 
+describe('Phase 21 — Customer Login Portal & Prototype Auth Hardening', () => {
+  it('validates email syntax with strict boundary checks', async () => {
+    const { validateEmail } = await import('../src/services/socialUserService');
+    expect(validateEmail('test@waypoint.psk').valid).toBe(true);
+    expect(validateEmail('user.name+tag@domain.co').valid).toBe(true);
+    expect(validateEmail('').valid).toBe(false);
+    expect(validateEmail('   ').valid).toBe(false);
+    expect(validateEmail('notanemail').valid).toBe(false);
+    expect(validateEmail('missing@domain').valid).toBe(false);
+    expect(validateEmail('@nodomain.com').valid).toBe(false);
+  });
+
+  it('validates password requirements for interaction realism without persistence', async () => {
+    const { validatePassword } = await import('../src/services/socialUserService');
+    expect(validatePassword('secure123').valid).toBe(true);
+    expect(validatePassword('1234').valid).toBe(true);
+    expect(validatePassword('').valid).toBe(false);
+    expect(validatePassword('   ').valid).toBe(false);
+    expect(validatePassword('abc').valid).toBe(false);
+  });
+
+  it('registers new prototype user with validation and prevents password leakage', async () => {
+    const {
+      registerPrototypeUser,
+      _resetAuthForTesting,
+      STORAGE_KEY_AUTH,
+      STORAGE_KEY_USER,
+    } = await import('../src/services/socialUserService');
+
+    _resetAuthForTesting();
+
+    // Rejection on short name
+    const resShortName = registerPrototypeUser('A', 'user@psk.hr', 'pass123', 'pass123');
+    expect(resShortName.success).toBe(false);
+    expect(resShortName.error).toContain('Name must be at least 2 characters');
+
+    // Rejection on invalid email
+    const resBadEmail = registerPrototypeUser('John Doe', 'bademail', 'pass123', 'pass123');
+    expect(resBadEmail.success).toBe(false);
+
+    // Rejection on password mismatch
+    const resMismatch = registerPrototypeUser('John Doe', 'john@psk.hr', 'pass123', 'mismatch');
+    expect(resMismatch.success).toBe(false);
+    expect(resMismatch.error).toContain('Passwords do not match');
+
+    // Successful registration
+    const resSuccess = registerPrototypeUser('John Doe', 'john@psk.hr', 'pass123', 'pass123');
+    expect(resSuccess.success).toBe(true);
+    expect(resSuccess.user).toBeDefined();
+    expect(resSuccess.user?.displayName).toBe('John Doe');
+    expect(resSuccess.user?.email).toBe('john@psk.hr');
+
+    // CRITICAL SECURITY INVARIANT: Passwords must NEVER be present on the UserProfile object
+    const userAny = resSuccess.user as Record<string, unknown>;
+    expect(userAny['password']).toBeUndefined();
+    expect(userAny['passwordHash']).toBeUndefined();
+
+    // Prevent duplicate registration
+    const resDup = registerPrototypeUser('John Two', 'john@psk.hr', 'pass123', 'pass123');
+    expect(resDup.success).toBe(false);
+    expect(resDup.error).toContain('already registered');
+  });
+
+  it('authenticates prototype user, supports demo account, and protects session state', async () => {
+    const {
+      authenticatePrototypeUser,
+      createDefaultUser,
+      getAuthSession,
+      clearAuthSession,
+      saveAuthSession,
+      _resetAuthForTesting,
+    } = await import('../src/services/socialUserService');
+
+    _resetAuthForTesting();
+
+    // Test fast Demo path
+    const demo = createDefaultUser();
+    expect(demo.email).toBe('luka.fan@waypoint.psk');
+    expect(demo.displayName).toBe('Luka Modric Fan');
+
+    // Authenticate with demo credentials
+    const authDemo = authenticatePrototypeUser('luka.fan@waypoint.psk', 'demo123');
+    expect(authDemo.success).toBe(true);
+    expect(authDemo.user?.username).toBe('luka_zg');
+
+    // Password must not be persisted
+    expect((authDemo.user as Record<string, unknown>)['password']).toBeUndefined();
+
+    // Verify session retrieval and clearing
+    saveAuthSession(authDemo.user!);
+    const current = getAuthSession();
+    expect(current).toBeDefined();
+    expect(current?.username).toBe('luka_zg');
+
+    clearAuthSession();
+    expect(getAuthSession()).toBeNull();
+  });
+
+  it('guarantees Operator Admin Portal (/admin) remains completely independent of customer auth', async () => {
+    const { resolvePortalRoute } = await import('../src/App');
+    const fs = await import('fs');
+    const path = await import('path');
+    const appSource = fs.readFileSync(path.resolve(__dirname, '../src/App.tsx'), 'utf-8');
+
+    // /admin resolves to admin regardless of customer session
+    expect(resolvePortalRoute('/admin', '')).toBe('admin');
+    expect(resolvePortalRoute('/admin/telemetry', '')).toBe('admin');
+
+    // Admin branch in App.tsx is evaluated prior to customer login checks
+    const adminBranchIndex = appSource.indexOf("if (portal === 'admin')");
+    const userAuthCheckIndex = appSource.indexOf("if (!user)");
+    expect(adminBranchIndex).toBeGreaterThan(-1);
+    expect(userAuthCheckIndex).toBeGreaterThan(-1);
+    expect(adminBranchIndex).toBeLessThan(userAuthCheckIndex);
+  });
+});
+
 
 
