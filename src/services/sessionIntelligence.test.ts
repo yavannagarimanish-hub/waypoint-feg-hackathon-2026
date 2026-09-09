@@ -59,6 +59,16 @@ import {
   resetCustomerContext,
   _resetCustomerContextFallbacksForTesting,
 } from './customerContextService';
+import {
+  evaluateNotificationSafety,
+  evaluateContextualNotification,
+  loadInAppNotifications,
+  saveInAppNotifications,
+  addInAppNotification,
+  markNotificationAsRead,
+  clearInAppNotifications,
+  _resetNotificationFallbackForTesting,
+} from './notificationService';
 
 function createMockEvent(type: any, metadata: any = {}, seq = 1): CanonicalEvent {
   return {
@@ -1834,6 +1844,233 @@ describe('Phase 12: Social Identity, Profiles & Room Leaderboards', () => {
       expect(loadRecentlyViewed().length).toBe(0);
       expect(loadSessionActivity().length).toBe(0);
       expect(loadUserRooms().length).toBe(0);
+    });
+  });
+
+  describe('PHASE 19: Contextual In-App Notifications & Responsible Intelligence Gate', () => {
+    const fixture1: SportsEvent = {
+      id: 'ufo:mtch:1',
+      sportId: '00',
+      sportName: 'Football',
+      tournament: 'Premier League',
+      category: 'England',
+      homeTeam: 'Arsenal',
+      awayTeam: 'Chelsea',
+      isLive: true,
+      clock: '72m',
+      markets: [],
+      hasLiveRoom: true,
+    };
+
+    const fixture2: SportsEvent = {
+      id: 'ufo:mtch:2',
+      sportId: '00',
+      sportName: 'Football',
+      tournament: 'La Liga',
+      category: 'Spain',
+      homeTeam: 'Real Madrid',
+      awayTeam: 'Barcelona',
+      isLive: false,
+      markets: [],
+      hasLiveRoom: true,
+    };
+
+    const allFixtures = [fixture1, fixture2];
+
+    it('1. Contextual notification generation creates valid live update notification', () => {
+      _resetNotificationFallbackForTesting();
+      const state: UnifiedSessionState = {
+        sessionId: 'sess-notif-1',
+        currentScreen: 'sports',
+        currentSport: { id: '00', name: 'Football' },
+        currentEvent: { id: fixture1.id, name: 'Arsenal vs Chelsea' },
+        currentMarket: null,
+        currentSelection: null,
+        journeyStage: 'EXPLORATION',
+        healthState: 'HEALTHY',
+        sessionQuality: { relevance: 100, informedness: 80, friction: 100, momentum: 60, recovery: 100, overallScore: 88 },
+        frictionSignals: [],
+        momentum: 'STABLE',
+        momentumScore: 60,
+        intentContext: { level: 'MEDIUM', activeGoal: 'Exploring Match', lastIntentTimestamp: Date.now() },
+        pendingAction: { inFlight: false, idempotencyKey: null, actionType: null, payload: null, startedAt: null },
+        recoveryState: { isRecovering: false, reason: null, recoveredReceipt: null },
+        socialRoomContext: { activeRoomId: null, activeUsersCount: 0, lastInteraction: null, currentUserId: null, roomRank: 0 },
+        sessionDna: 'EXPLORER',
+        sessionDnaTrail: ['EXPLORATION'],
+      };
+
+      const candidate = evaluateContextualNotification({
+        state,
+        eventsLog: [createMockEvent('EVENT_VIEWED')],
+        events: allFixtures,
+        rooms: [],
+      });
+
+      expect(candidate).not.toBeNull();
+      expect(candidate?.text).toBe('Arsenal vs Chelsea is now live (72m).');
+      expect(candidate?.category).toBe('live_update');
+
+      const added = addInAppNotification(candidate!, allFixtures);
+      expect(added).not.toBeNull();
+      expect(added?.read).toBe(false);
+    });
+
+    it('2. Journey-aware notification generates continuity message for upcoming match', () => {
+      _resetNotificationFallbackForTesting();
+      const state: UnifiedSessionState = {
+        sessionId: 'sess-notif-2',
+        currentScreen: 'sports',
+        currentSport: { id: '00', name: 'Football' },
+        currentEvent: { id: fixture2.id, name: 'Real Madrid vs Barcelona' },
+        currentMarket: null,
+        currentSelection: null,
+        journeyStage: 'DECISION',
+        healthState: 'HEALTHY',
+        sessionQuality: { relevance: 100, informedness: 80, friction: 100, momentum: 60, recovery: 100, overallScore: 88 },
+        frictionSignals: [],
+        momentum: 'STABLE',
+        momentumScore: 60,
+        intentContext: { level: 'HIGH', activeGoal: 'Reviewing Odds', lastIntentTimestamp: Date.now() },
+        pendingAction: { inFlight: false, idempotencyKey: null, actionType: null, payload: null, startedAt: null },
+        recoveryState: { isRecovering: false, reason: null, recoveredReceipt: null },
+        socialRoomContext: { activeRoomId: null, activeUsersCount: 0, lastInteraction: null, currentUserId: null, roomRank: 0 },
+        sessionDna: 'STANDARD',
+        sessionDnaTrail: ['DECISION'],
+      };
+
+      const candidate = evaluateContextualNotification({
+        state,
+        eventsLog: [createMockEvent('MARKET_VIEWED')],
+        events: allFixtures,
+        rooms: [],
+      });
+
+      expect(candidate).not.toBeNull();
+      expect(candidate?.text).toBe('You were viewing Real Madrid vs Barcelona. Continue where you left off.');
+      expect(candidate?.category).toBe('continuity');
+    });
+
+    it('3. Responsible Intelligence Gate blocks urgency pressure ("limited time", "act fast")', () => {
+      const urgentCandidate = 'Hurry! Limited time to place your action before it expires!';
+      const check = evaluateNotificationSafety(urgentCandidate);
+      expect(check.passed).toBe(false);
+      expect(check.reasons.length).toBeGreaterThan(0);
+
+      // Verify addInAppNotification rejects it
+      const added = addInAppNotification({
+        text: urgentCandidate,
+        journeyStage: 'DECISION',
+        category: 'live_update',
+      });
+      expect(added).toBeNull();
+    });
+
+    it('4. Responsible Intelligence Gate blocks betting-frequency messages ("Bet now", "Bet again")', () => {
+      const frequencyTexts = [
+        'Bet now on Arsenal!',
+        'You should bet again today.',
+        "You haven't bet yet today!",
+        'Keep betting on Premier League matches.',
+        'Place another bet on the counter-attack.',
+      ];
+
+      for (const text of frequencyTexts) {
+        const check = evaluateNotificationSafety(text);
+        expect(check.passed).toBe(false);
+      }
+    });
+
+    it('5. Responsible Intelligence Gate blocks loss-chasing patterns ("Recover your losses", "Increase your stake")', () => {
+      const lossChasingTexts = [
+        'Recover your losses on the next match.',
+        'Increase your stake to double your payout!',
+        'Chase your earlier outcome with this match.',
+      ];
+
+      for (const text of lossChasingTexts) {
+        const check = evaluateNotificationSafety(text);
+        expect(check.passed).toBe(false);
+      }
+    });
+
+    it('6. Notification persistence survives retrieval and is capped at 10 items', () => {
+      _resetNotificationFallbackForTesting();
+      for (let i = 1; i <= 15; i++) {
+        const notif = {
+          text: `Match notification update number ${i}`,
+          journeyStage: 'EXPLORATION' as const,
+          category: 'content' as const,
+        };
+        addInAppNotification(notif, allFixtures);
+      }
+
+      const loaded = loadInAppNotifications();
+      expect(loaded.length).toBe(10);
+      expect(loaded[0].text).toBe('Match notification update number 15');
+    });
+
+    it('7. Unread count and mark as read work correctly', () => {
+      _resetNotificationFallbackForTesting();
+      const n1 = addInAppNotification({ text: 'Valid test notification 1', journeyStage: 'EXPLORATION', category: 'content' });
+      const n2 = addInAppNotification({ text: 'Valid test notification 2', journeyStage: 'EXPLORATION', category: 'content' });
+      expect(n1).not.toBeNull();
+      expect(n2).not.toBeNull();
+
+      let loaded = loadInAppNotifications();
+      expect(loaded.filter(n => !n.read).length).toBe(2);
+
+      markNotificationAsRead(n1!.id);
+      loaded = loadInAppNotifications();
+      expect(loaded.find(n => n.id === n1!.id)?.read).toBe(true);
+      expect(loaded.find(n => n.id === n2!.id)?.read).toBe(false);
+      expect(loaded.filter(n => !n.read).length).toBe(1);
+    });
+
+    it('8. Invalid/nonexistent fixture gracefully discarded during notification creation', () => {
+      _resetNotificationFallbackForTesting();
+      const invalidCandidate = {
+        text: 'Nonexistent game is starting soon.',
+        journeyStage: 'EXPLORATION' as const,
+        category: 'live_update' as const,
+        fixtureId: 'nonexistent-fixture-id',
+      };
+      const added = addInAppNotification(invalidCandidate, allFixtures);
+      expect(added).toBeNull();
+      expect(loadInAppNotifications().length).toBe(0);
+    });
+
+    it('9. Reset Demo clears all notifications', () => {
+      _resetNotificationFallbackForTesting();
+      addInAppNotification({ text: 'Session notification before reset', journeyStage: 'EXPLORATION', category: 'content' });
+      expect(loadInAppNotifications().length).toBe(1);
+
+      clearInAppNotifications();
+      expect(loadInAppNotifications().length).toBe(0);
+    });
+
+    it('10. Invariants: Continue Playing, Lifeboat, and Session Quality formulas remain unchanged', () => {
+      // Continue playing priority invariant
+      const memory: SessionMemory = {
+        sessionId: 'sess-p0-verify',
+        lastEventId: fixture1.id,
+        journeyStage: 'EXPLORATION',
+        healthState: 'HEALTHY',
+        interrupted: false,
+        resumable: true,
+        hasProtectedAction: false,
+        lastSeenAt: Date.now(),
+      };
+      saveSessionMemory(memory);
+      expect(loadSessionMemory([fixture1])?.resumable).toBe(true);
+
+      // Lifeboat invariant
+      const recovering = transitionHealthState('AT_RISK', createMockEvent('RECOVERY_STARTED'), []);
+      expect(recovering).toBe('RECOVERING');
+
+      // Session quality invariant: round(0.2*Rel + 0.15*Inf + 0.35*Fric + 0.15*Mom + 0.15*Rec)
+      const sq = calculateSessionQuality([], [], 'HEALTHY');
+      expect(sq.overallScore).toBe(84);
     });
   });
 });

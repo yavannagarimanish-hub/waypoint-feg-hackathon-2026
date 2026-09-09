@@ -59,6 +59,16 @@ import {
   recordSessionActivity,
   resetCustomerContext,
 } from '../services/customerContextService';
+import {
+  InAppNotification,
+  loadInAppNotifications,
+  saveInAppNotifications,
+  addInAppNotification,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  clearInAppNotifications,
+  evaluateContextualNotification,
+} from '../services/notificationService';
 
 interface SessionContextType {
   state: UnifiedSessionState;
@@ -112,6 +122,14 @@ interface SessionContextType {
   sessionMemory: SessionMemory | null;
   resumeSession: () => void;
   clearMemory: () => void;
+
+  // Contextual Notifications (Phase 19)
+  notifications: InAppNotification[];
+  unreadNotificationCount: number;
+  markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => void;
+  dismissNotification: (id: string) => void;
+  clearNotifications: () => void;
 
   // Recovery & Chaos Sandbox
   triggerChaosNetworkLoss: (durationMs?: number) => void;
@@ -170,6 +188,10 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // Session Memory State (Phase 15)
   const [sessionMemory, setSessionMemory] = useState<SessionMemory | null>(() => loadSessionMemory(INITIAL_EVENTS));
+
+  // Contextual Notifications (Phase 19)
+  const [notifications, setNotifications] = useState<InAppNotification[]>(() => loadInAppNotifications());
+
   const [state, setState] = useState<UnifiedSessionState>({
     sessionId,
     currentScreen: 'home',
@@ -344,6 +366,29 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       setSessionMemory(mem);
     }
   }, [state, eventsLog, activeEvent, betslip]);
+
+  // Evaluate Contextual Notifications (Phase 19)
+  useEffect(() => {
+    if (eventsLog.length > 1) {
+      const candidate = evaluateContextualNotification({
+        state,
+        eventsLog,
+        events,
+        rooms,
+      });
+      if (candidate) {
+        const added = addInAppNotification(candidate, events);
+        if (added) {
+          setNotifications(loadInAppNotifications());
+          emitEvent('NOTIFICATION_GENERATED', {
+            notificationId: added.id,
+            category: added.category,
+            journeyStage: added.journeyStage,
+          });
+        }
+      }
+    }
+  }, [state.currentSport, state.currentEvent, state.healthState, state.socialRoomContext.activeRoomId, state.journeyStage]);
 
   // Social Identity Actions
   const loginUser = (username: string, displayName?: string, avatar?: string) => {
@@ -1094,6 +1139,10 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
     // Reset Customer Context Layer (Phase 17)
     resetCustomerContext();
 
+    // Reset Contextual Notifications (Phase 19)
+    clearInAppNotifications();
+    setNotifications([]);
+
     const initialEvent: CanonicalEvent = {
       id: `evt-1-${Math.random().toString(36).substring(2, 6)}`,
       sessionId: newSessionId,
@@ -1212,6 +1261,27 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
         sessionMemory,
         resumeSession,
         clearMemory,
+        notifications,
+        unreadNotificationCount: notifications.filter(n => !n.read).length,
+        markNotificationRead: (id: string) => {
+          const updated = markNotificationAsRead(id);
+          setNotifications(updated);
+          emitEvent('NOTIFICATION_OPENED', { notificationId: id });
+        },
+        markAllNotificationsRead: () => {
+          const updated = markAllNotificationsAsRead();
+          setNotifications(updated);
+        },
+        dismissNotification: (id: string) => {
+          const filtered = notifications.filter(n => n.id !== id);
+          saveInAppNotifications(filtered);
+          setNotifications(filtered);
+          emitEvent('NOTIFICATION_DISMISSED', { notificationId: id });
+        },
+        clearNotifications: () => {
+          clearInAppNotifications();
+          setNotifications([]);
+        },
         triggerChaosNetworkLoss,
         triggerChaosOddsDrift,
         triggerChaosLatencySpike,

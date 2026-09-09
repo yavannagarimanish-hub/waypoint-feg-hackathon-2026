@@ -15,6 +15,7 @@ import {
   LogIn,
   User,
 } from 'lucide-react';
+import { NotificationCenter } from '../notifications/NotificationCenter';
 
 interface CommandBarProps {
   onOpenCreateRoom?: () => void;
@@ -195,6 +196,9 @@ export const CommandBar: React.FC<CommandBarProps> = ({
             Reset Demo
           </button>
         </div>
+
+        {/* Contextual Notification Bell (Phase 19) */}
+        <NotificationCenter />
 
         {/* User Identity / Profile Button */}
         {user ? (

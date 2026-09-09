@@ -38,3 +38,5 @@ secrets.json
 .system_generated/
 *.tmp
 *.bak
+
+.vercel
