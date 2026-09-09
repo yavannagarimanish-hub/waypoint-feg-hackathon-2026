@@ -1,60 +1,136 @@
-# WAYPOINT — Regulatory & Compliance Note
+# WAYPOINT — COMPLIANCE NOTE
 
-> **FEG Innovation Hackathon 2026**  
-> **Challenge 1 — Session Quality and Session-to-Action Conversion**
+**FEG Innovation Hackathon 2026 | Challenge 1 — Session Quality & Session-to-Action Conversion**
+
+## The principle
+
+WAYPOINT is built to **remove unnecessary friction from a session, not to manufacture gambling pressure**.
+
+The product is designed around a simple distinction:
+
+> **We optimise the session, not the customer's gambling intensity.**
+
+WAYPOINT detects where a session is breaking, understands why it is breaking, and helps the customer continue naturally when they already have legitimate intent — or stop safely when they should.
+
+This prototype uses synthetic/demo data and deterministic decision logic. It is **not a production gambling system or legal compliance implementation**. Any production deployment would require jurisdiction-specific legal, privacy, security and Responsible Gambling review.
+
+## EU baseline
+
+### GDPR
+
+WAYPOINT follows a **privacy-by-design and data-minimisation approach**.
+
+The core principles are:
+
+* collect only what is required for the session-intelligence purpose;
+* use data for a defined purpose;
+* minimise personal data wherever possible;
+* retain data only for as long as required;
+* protect data through appropriate technical and organisational controls;
+* maintain accountability and auditability.
+
+These principles are consistent with the European Commission's GDPR guidance on purpose limitation, data minimisation, storage limitation, security and accountability.
+
+The prototype therefore avoids real customer personal data and uses synthetic/demo session data. In production, the operator would need to establish the appropriate lawful basis, transparency, retention, access controls and safeguards for any profiling or automated decision-making involving personal data.
+
+### ePrivacy
+
+Session telemetry, cookies, local storage and similar technologies would be assessed against the applicable ePrivacy requirements and national implementation before production use.
+
+The rule is simple: **do not collect or retain data just because the system can.**
+
+### AI and automated decisioning
+
+WAYPOINT's core session decisions are deterministic in this prototype.
+
+AI is not given the job of deciding how aggressively a customer should gamble. Future AI-assisted capabilities, such as session investigation or root-cause analysis, would require appropriate risk assessment, transparency, governance and human oversight before production use.
+
+The objective is **explainable session intelligence**, not a black-box system pushing customers towards more gambling.
+
+### Accessibility
+
+The customer experience should be designed and tested for accessibility, including keyboard navigation, readable interfaces, appropriate contrast, screen-reader compatibility and clear interaction states.
+
+The EU accessibility baseline references **EN 301 549**, which closely follows WCAG 2.1 Level AA for relevant web accessibility requirements.
+
+### AML / KYC / Identity
+
+WAYPOINT does not replace or bypass operator controls for age verification, identity verification, KYC, AML, account restrictions or regulatory checks.
+
+Those controls remain **upstream production requirements**.
+
+WAYPOINT operates on top of an eligible customer/session context and does not attempt to override those controls.
 
 ---
 
-## 1. Compliance Statement & Philosophy
+# Responsible Gambling by Design
 
-Waypoint is built under the foundational tenet that **session intelligence must protect, inform, and respect the customer**, never manipulate or exploit them. The platform strictly complies with European, UKGC, and MGA responsible gambling standards by eliminating friction-induced uncertainty without introducing persuasive or predatory mechanics.
+Responsible Gambling is **not an extra filter added at the end of the product**.
+
+It is a constraint inside the decision layer.
+
+WAYPOINT therefore explicitly avoids:
+
+* dark patterns;
+* artificial urgency;
+* loss-chasing prompts;
+* stake escalation;
+* gambling-frequency pressure;
+* emotional or vulnerability-based targeting;
+* recommendations designed to increase gambling intensity;
+* interventions that attempt to override self-exclusion or other Responsible Gambling restrictions;
+* unsafe automatic retries or duplicate actions.
+
+EU-level Commission guidance on online gambling has specifically addressed consumer protection, prevention of minors gambling, responsible-gambling information, time-outs and self-exclusion. The 2014 Commission Recommendation is a **recommendation rather than a single binding EU-wide gambling law**, so production implementation must follow the applicable national gambling rules and licence conditions.
+
+## WAYPOINT safeguards
+
+**1. Responsible Gate**
+Potential interventions are checked against Responsible Gambling constraints before they are shown.
+
+**2. No vulnerability inference**
+WAYPOINT does not attempt to infer emotional state, financial vulnerability or psychological susceptibility and then use that information to influence gambling behaviour.
+
+**3. Self-exclusion comes first**
+A Responsible Gambling restriction is never treated as a conversion problem to solve.
+
+**4. Lifeboat protects actions**
+When a connection fails after a customer has already initiated an action, WAYPOINT protects the pending action and reconciles the outcome after connection recovery.
+
+> **No blind retry. No unsafe duplicate submission.**
+
+**5. Session Memory is continuity, not pressure**
+Continue Playing exists to restore legitimate interrupted context. It is not designed to create urgency or encourage a customer to keep gambling.
+
+**6. Notifications are controlled**
+Contextual notifications are based on non-sensitive interest signals and session context. Safety checks block urgency, loss-chasing and gambling-intensity cues.
 
 ---
 
-## 2. Responsible Intelligence Hard Gates
+# Production Gate
 
-Waypoint implements an automated **Responsible Intelligence Safety Gate** across all customer-facing touchpoints (Continue Playing, Smart Start, In-App Notifications):
+Before production deployment, WAYPOINT would require:
 
-### A. Prohibited Persuasion Mechanics
-- **No Urgency or Countdown Pressure**: Prohibits language such as *"act fast"*, *"hurry"*, *"limited time"*, *"clock is ticking"*, or *"before odds disappear"*.
-- **No Betting Frequency Cues**: Prohibits language urging repeat wagers, such as *"bet now"*, *"bet again"*, *"you haven't placed a bet today"*, or *"don't miss out"*.
-- **Zero Loss-Chasing Stimulation**: Prohibits any suggestion to recover previous losses, double down, or escalate stake sizes (*"win it back"*, *"recover your losses"*, *"increase stake"*).
+* jurisdiction-specific gambling-law and licence review;
+* GDPR and ePrivacy assessment;
+* DPIA / automated-decision assessment where applicable;
+* security and access-control review;
+* age and identity verification integration;
+* AML/KYC integration;
+* self-exclusion and Responsible Gambling integration;
+* accessibility assessment;
+* retention and deletion policies;
+* audit and incident-management processes;
+* human oversight for any future AI-driven capability.
 
-### B. Protection Over Persuasion
-- **Session Lifeboat Purpose**: The Lifeboat exists solely to prevent duplicate wagers and protect the customer's intended state during sudden disconnects. It never auto-submits, never auto-retries, and only reconciles state upon confirmed network recovery.
-- **Continue Playing Purpose**: Re-entry restores the user's navigational and analytical context (fixtures viewed, markets considered). It never urges immediate wagering upon return.
+## Final compliance principle
 
----
+> **Reduce unnecessary friction — never manufacture gambling pressure.**
 
-## 3. Privacy, Data Minimization & Non-Profiling Guarantees
+WAYPOINT's business objective is therefore not:
 
-Waypoint enforces strict data boundaries:
-- **Zero Sensitive Profiling**: The system **never** attempts to infer:
-  - Gambling vulnerability or addiction risk
-  - Emotional distress, anger, or frustration
-  - Financial wealth, creditworthiness, or net worth
-  - Protected characteristics or personal identity attributes
-- **Deterministic Technical Telemetry**: Telemetry is strictly confined to observable technical events: sequence numbers, network latency spikes, odds drift variances, UI navigation actions, and component errors.
-- **Client-Authoritative & Ephemeral**: All session data in this prototype resides ephemerally in memory and browser `localStorage`. No personal data or player profiles are transmitted to external servers.
+**“How do we make customers gamble more?”**
 
----
+It is:
 
-## 4. AI Investigator Grounding & Disclaimers
-
-The **AI Session Investigator** in the Operator Admin Portal operates on deterministic diagnostic heuristics:
-- **Causality Disclaimer**: Every report generated carries the explicit disclaimer:
-  > *"Observed association — not causal proof."*
-- **Auditability**: Every finding references explicit sequence numbers from the Canonical Event Bus, allowing operators to verify telemetry without hallucinated conclusions.
-
----
-
-## 5. Summary Matrix of Regulatory Alignment
-
-| Regulatory Requirement | Waypoint Implementation | Status |
-|---|---|---|
-| **Prevention of Unintended Bets** | Idempotency locking prevents duplicate bet placement on reconnection | **COMPLIANT** |
-| **No Predatory Marketing** | Strict lexical safety filter blocks urgency and frequency triggers | **COMPLIANT** |
-| **Fair & Transparent Odds** | Live odds drift shock detection alerts user and requests confirmation | **COMPLIANT** |
-| **Consumer Data Protection (GDPR)** | Minimal, pseudonymized, client-side session telemetry | **COMPLIANT** |
-| **Participation Over Turnover** | Social Leaderboards scored on non-monetary participation, not wager size | **COMPLIANT** |
- 
+**“How do we stop the product from getting in the way of what the customer was already trying to do — while making sure the customer can always stop safely?”**
