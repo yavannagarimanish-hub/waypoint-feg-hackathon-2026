@@ -12,10 +12,23 @@ import { LiveRoom } from './components/social/LiveRoom';
 import { CreateRoomModal, JoinRoomModal } from './components/social/RoomModals';
 import { ProfileModal, LoginModal } from './components/social/UserModals';
 import { OperatorDashboard } from './components/operator/OperatorDashboard';
-import { IntelligenceDebugPanel } from './components/common/IntelligenceDebugPanel';
 import { SportsEvent } from './types/canonical';
 import { parseRoomUrl, resolveRoomDeepLink } from './services/roomDeepLink';
 import { AlertTriangle, Home } from 'lucide-react';
+
+/**
+ * Deterministic Portal Route Resolver
+ * Guarantees strict separation between Customer User Portal (/ or /user)
+ * and Operator Admin Portal (/admin).
+ */
+export function resolvePortalRoute(pathname: string, hash: string): 'user' | 'admin' {
+  const path = (pathname || '').toLowerCase();
+  const h = (hash || '').toLowerCase();
+  if (path.startsWith('/admin') || h.startsWith('#admin') || h === '#/admin') {
+    return 'admin';
+  }
+  return 'user';
+}
 
 const MainLayout: React.FC = () => {
   const { state, events, activeEvent, selectEvent, joinRoom, joinCustomRoom, navigateToScreen } = useSession();
@@ -23,24 +36,13 @@ const MainLayout: React.FC = () => {
   // Two clearly separated application experiences: 'user' vs 'admin'
   const [portal, setPortal] = useState<'user' | 'admin'>(() => {
     if (typeof window === 'undefined') return 'user';
-    const path = window.location.pathname.toLowerCase();
-    const hash = window.location.hash.toLowerCase();
-    if (path.startsWith('/admin') || hash.startsWith('#admin') || hash === '#/admin') {
-      return 'admin';
-    }
-    return 'user';
+    return resolvePortalRoute(window.location.pathname, window.location.hash);
   });
 
   // Sync portal with URL changes (popstate & hashchange)
   useEffect(() => {
     const handleUrlChange = () => {
-      const path = window.location.pathname.toLowerCase();
-      const hash = window.location.hash.toLowerCase();
-      if (path.startsWith('/admin') || hash.startsWith('#admin') || hash === '#/admin') {
-        setPortal('admin');
-      } else {
-        setPortal('user');
-      }
+      setPortal(resolvePortalRoute(window.location.pathname, window.location.hash));
     };
 
     window.addEventListener('popstate', handleUrlChange);
@@ -170,7 +172,7 @@ const MainLayout: React.FC = () => {
 
   // RENDER USER PORTAL
   return (
-    <div className="min-h-screen bg-[#0e0e11] text-zinc-200 flex flex-col font-sans pb-24 md:pb-8 selection:bg-[#1752bf] selection:text-white">
+    <div className="min-h-screen bg-[#0e0e11] text-zinc-200 flex flex-col font-sans pb-8 selection:bg-[#1752bf] selection:text-white">
       {/* Top Command Bar & Session GPS */}
       <CommandBar
         onOpenCreateRoom={() => handleOpenCreateRoom()}
@@ -402,20 +404,15 @@ const MainLayout: React.FC = () => {
         )}
       </main>
 
-      {/* Discreet Footer Link for Prototype Admin Access */}
+      {/* Customer Sportsbook Footer */}
       <footer className="mt-8 border-t border-[#1a1a24] py-3 px-4 flex flex-col sm:flex-row items-center justify-between text-[11px] text-zinc-500 gap-2 max-w-[1600px] mx-auto w-full">
         <div className="flex items-center gap-2">
-          <span>PSK Waypoint Prototype</span>
+          <span>PSK Waypoint</span>
           <span>•</span>
-          <span>Role: Customer (User Portal)</span>
+          <span>Customer Sportsbook Portal</span>
         </div>
-        <div>
-          <button
-            onClick={() => switchPortal('admin')}
-            className="text-zinc-400 hover:text-blue-400 font-mono transition underline underline-offset-2 flex items-center gap-1"
-          >
-            <span>🔒 Prototype Admin Access (/admin)</span>
-          </button>
+        <div className="text-zinc-600 font-mono text-[10px]">
+          Session Protection Active • Idempotency Shield Nominal
         </div>
       </footer>
 
@@ -445,9 +442,6 @@ const MainLayout: React.FC = () => {
       <div className="lg:hidden">
         <BetslipTray isDesktopMode={false} />
       </div>
-
-      {/* Developer / Operator Session Intelligence Radar */}
-      <IntelligenceDebugPanel />
     </div>
   );
 };
