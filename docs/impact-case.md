@@ -13,3 +13,4 @@ In high-stakes, time-critical sports betting environments, high-intent customers
 
 **Waypoint** transforms silent drop-offs into visible, protected, and resilient user sessions. By introducing client-authoritative Session Intelligence, the **Session Lifeboat**, and **Continue Playing** re-entry, Waypoint preserves customer intent, eliminates duplicate transaction risks, and creates social engagement through **Live Match Rooms**.
  
+https://docs.google.com/document/d/1EEePFM87fi_O25xUYNfqlcKz0RiBdpGH/edit?usp=sharing&ouid=103277966847398830257&rtpof=true&sd=true
